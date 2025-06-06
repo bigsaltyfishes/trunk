@@ -97,6 +97,8 @@ pub struct RustApp {
     import_bindings_name: Option<String>,
     /// The name of the initializer module
     initializer: Option<PathBuf>,
+    /// Gzip compression enabled for the WASM file
+    gzip_compression: bool,
 }
 
 /// Describes how the rust application is used.
@@ -148,6 +150,7 @@ impl RustApp {
                 path
             })
             .unwrap_or_else(|| html_dir.join("Cargo.toml"));
+        let gzip_compression = !attrs.contains_key("data-no-gzip-compression");
         let bin = attrs.get("data-bin").map(|attr| attr.to_string());
         let target_name = attrs.get("data-target-name").map(|attr| attr.to_string());
         let keep_debug = attrs.contains_key("data-keep-debug");
@@ -307,6 +310,7 @@ impl RustApp {
             import_bindings_name,
             initializer,
             target_path,
+            gzip_compression
         })
     }
 
@@ -357,6 +361,7 @@ impl RustApp {
             import_bindings_name: None,
             initializer: None,
             target_path: None,
+            gzip_compression: true,
         }))
     }
 
@@ -613,6 +618,44 @@ impl RustApp {
         let js_loader_path_dist = self.cfg.staging_dist.join(&hashed_js_name);
         let wasm_name = format!("{}_bg.wasm", self.name);
         let wasm_path = bindgen_out.join(&wasm_name);
+        if self.gzip_compression {
+            // Compress the WASM file with gzip.
+            let ToolInformation {
+                path: gzip_path,
+                version: _,
+            } = tools::get_info(
+                Application::Gzip,
+                None,
+                self.cfg.offline,
+                &self.cfg.client_options(),
+            )
+            .await?;
+            
+            let wasm_path_s = wasm_path.to_string();
+            let args = vec!["-f", "-9", &wasm_path_s];
+            common::run_command(
+                Application::Gzip.name(),
+                &gzip_path,
+                &args,
+                &self.cfg.working_directory,
+            )
+            .await
+            .map_err(|err| {
+                check_target_not_found_err(err, Application::Gzip.name())
+            })?;
+
+            // Rename the gzipped file to the expected name.
+            std::fs::rename(
+                bindgen_out.join(format!("{wasm_name}.gz")),
+                &wasm_path,
+            )
+            .with_context(|| {
+                format!(
+                    "error renaming gzipped WASM file to expected name: {:?}",
+                    wasm_path
+                )
+            })?;
+        }
         let wasm_path_dist = self.cfg.staging_dist.join(&hashed_wasm_name);
 
         let hashed_loader_name = self.loader_shim.then(|| {
@@ -761,6 +804,7 @@ impl RustApp {
             import_bindings: self.import_bindings,
             import_bindings_name: self.import_bindings_name.clone(),
             initializer,
+            gzip_compression: self.gzip_compression,
             wasm_bindgen_features,
         })
     }

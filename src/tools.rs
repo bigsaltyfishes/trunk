@@ -28,6 +28,8 @@ pub enum Application {
     WasmBindgen,
     /// wasm-opt to improve performance and size of the output file further.
     WasmOpt,
+    /// Gzip compression for the output files.
+    Gzip
 }
 
 /// These options configure how Trunk sets up it's HTTP Client.
@@ -54,6 +56,7 @@ impl Application {
             Self::TailwindCssExtra => "tailwindcss-extra",
             Self::WasmBindgen => "wasm-bindgen",
             Self::WasmOpt => "wasm-opt",
+            Self::Gzip => "gzip",
         }
     }
 
@@ -66,6 +69,7 @@ impl Application {
                 Self::TailwindCssExtra => "tailwindcss-extra.exe",
                 Self::WasmBindgen => "wasm-bindgen.exe",
                 Self::WasmOpt => "bin/wasm-opt.exe",
+                Self::Gzip => "gzip.exe",
             }
         } else {
             match self {
@@ -74,6 +78,7 @@ impl Application {
                 Self::TailwindCssExtra => "tailwindcss-extra",
                 Self::WasmBindgen => "wasm-bindgen",
                 Self::WasmOpt => "bin/wasm-opt",
+                Self::Gzip => "gzip",
             }
         }
     }
@@ -98,6 +103,7 @@ impl Application {
                     &[]
                 }
             }
+            Self::Gzip => &[],
         }
     }
 
@@ -109,6 +115,7 @@ impl Application {
             Self::TailwindCssExtra => "1.7.25",
             Self::WasmBindgen => "0.2.89",
             Self::WasmOpt => "version_123",
+            Self::Gzip => "1.3.12"
         }
     }
 
@@ -167,6 +174,10 @@ impl Application {
                 ("macos", "aarch64") => format!("https://github.com/WebAssembly/binaryen/releases/download/{version}/binaryen-{version}-arm64-macos.tar.gz"),
                 _ => format!("https://github.com/WebAssembly/binaryen/releases/download/{version}/binaryen-{version}-{target_arch}-{target_os}.tar.gz")
             }
+
+            Self::Gzip => match (target_os, target_arch) {
+                _ => bail!("Unable to download gzip for {target_os} {target_arch}")
+            }
         })
     }
 
@@ -178,6 +189,7 @@ impl Application {
             Application::TailwindCssExtra => "--help",
             Application::WasmBindgen => "--version",
             Application::WasmOpt => "--version",
+            Application::Gzip => "--version",
         }
     }
 
@@ -212,6 +224,11 @@ impl Application {
                     .nth(2)
                     .with_context(|| format!("missing or malformed version output: {}", text))?
             ),
+            Application::Gzip => text
+                .split(' ')
+                .nth(1)
+                .with_context(|| format!("missing or malformed version output: {}", text))?
+                .to_owned(),
         };
         Ok(formatted_version)
     }
